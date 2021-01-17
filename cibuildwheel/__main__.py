@@ -5,18 +5,16 @@ import textwrap
 import traceback
 from configparser import ConfigParser
 from pathlib import Path
-
-from typing import Any, Dict, List, Optional, overload
+from typing import Any, Dict, List, Optional, Set, overload
 
 import cibuildwheel
 import cibuildwheel.linux
 import cibuildwheel.macos
 import cibuildwheel.windows
-from cibuildwheel.environment import (
-    EnvironmentParseError,
-    parse_environment,
-)
+from cibuildwheel.environment import EnvironmentParseError, parse_environment
+from cibuildwheel.typing import PLATFORMS, PlatformName, assert_never
 from cibuildwheel.util import (
+    Architecture,
     BuildOptions,
     BuildSelector,
     DependencyConstraints,
@@ -49,6 +47,8 @@ def get_option_from_environment(option_name: str, platform: Optional[str] = None
 
 
 def main() -> None:
+    platform: PlatformName
+
     parser = argparse.ArgumentParser(
         description='Build wheels for all the platforms.',
         epilog='''
@@ -67,6 +67,17 @@ def main() -> None:
                             run in Windows, and it will build and test for all versions of
                             Python. Default: auto.
                         ''')
+
+    parser.add_argument('--archs',
+                        default=None,
+                        help='''
+                            Comma-separated list of CPU architectures to build for.
+                            When set to 'auto', builds the architectures natively supported
+                            on this machine. Set this option to build an architecture
+                            via emulation, for example, using binfmt_misc and QEMU.
+                            Default: auto.
+                            Choices: auto, native, all, {}
+                        '''.format(", ".join(a.name for a in Architecture)))
     parser.add_argument('--output-dir',
                         default=os.environ.get('CIBW_OUTPUT_DIR', 'wheelhouse'),
                         help='Destination folder for the wheels.')
@@ -112,6 +123,10 @@ def main() -> None:
                   file=sys.stderr)
             exit(2)
 
+    if platform not in PLATFORMS:
+        print(f'cibuildwheel: Unsupported platform: {platform}', file=sys.stderr)
+        exit(2)
+
     package_dir = Path(args.package_dir)
     output_dir = Path(args.output_dir)
 
@@ -119,8 +134,10 @@ def main() -> None:
         repair_command_default = 'auditwheel repair -w {dest_dir} {wheel}'
     elif platform == 'macos':
         repair_command_default = 'delocate-listdeps {wheel} && delocate-wheel --require-archs x86_64 -w {dest_dir} {wheel}'
-    else:
+    elif platform == 'windows':
         repair_command_default = ''
+    else:
+        assert_never(platform)
 
     build_config, skip_config = os.environ.get('CIBW_BUILD', '*'), os.environ.get('CIBW_SKIP', '')
     environment_config = get_option_from_environment('CIBW_ENVIRONMENT', platform=platform, default='')
@@ -168,8 +185,14 @@ def main() -> None:
         print('cibuildwheel: Could not find setup.py, setup.cfg or pyproject.toml at root of package', file=sys.stderr)
         exit(2)
 
+    if args.archs is not None:
+        archs_config_str = args.archs
+    else:
+        archs_config_str = get_option_from_environment('CIBW_ARCHS', platform=platform, default='auto')
+    archs = Architecture.parse_config(archs_config_str, platform=platform)
+
     if args.print_build_identifiers:
-        print_build_identifiers(platform, build_selector)
+        print_build_identifiers(platform, build_selector, archs)
         exit(0)
 
     manylinux_images: Optional[Dict[str, str]] = None
@@ -202,6 +225,7 @@ def main() -> None:
             manylinux_images[build_platform] = image
 
     build_options = BuildOptions(
+        architectures=archs,
         package_dir=package_dir,
         output_dir=output_dir,
         test_command=test_command,
@@ -233,8 +257,7 @@ def main() -> None:
     elif platform == 'macos':
         cibuildwheel.macos.build(build_options)
     else:
-        print(f'cibuildwheel: Unsupported platform: {platform}', file=sys.stderr)
-        exit(2)
+        assert_never(platform)
 
 
 def detect_obsolete_options() -> None:
@@ -284,12 +307,15 @@ def print_preamble(platform: str, build_options: BuildOptions) -> None:
     print('\nHere we go!\n')
 
 
-def print_build_identifiers(platform: str, build_selector: BuildSelector) -> None:
+def print_build_identifiers(
+    platform: str, build_selector: BuildSelector, architectures: Set[Architecture]
+) -> None:
+
     python_configurations: List[Any] = []
     if platform == 'linux':
-        python_configurations = cibuildwheel.linux.get_python_configurations(build_selector)
+        python_configurations = cibuildwheel.linux.get_python_configurations(build_selector, architectures)
     elif platform == 'windows':
-        python_configurations = cibuildwheel.windows.get_python_configurations(build_selector)
+        python_configurations = cibuildwheel.windows.get_python_configurations(build_selector, architectures)
     elif platform == 'macos':
         python_configurations = cibuildwheel.macos.get_python_configurations(build_selector)
 

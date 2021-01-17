@@ -3,24 +3,33 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from os import PathLike
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Sequence, Union
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set
 from zipfile import ZipFile
 
 import toml
 
 from .environment import ParsedEnvironment
 from .logger import log
-from .util import (BuildOptions, BuildSelector, NonPlatformWheelError,
-                   download, get_build_verbosity_extra_flags, get_pip_script,
-                   prepare_command)
+from .typing import PathOrStr
+from .util import (
+    Architecture,
+    BuildOptions,
+    BuildSelector,
+    NonPlatformWheelError,
+    allowed_architectures_check,
+    download,
+    get_build_verbosity_extra_flags,
+    get_pip_script,
+    prepare_command,
+    read_python_configs,
+)
 
 IS_RUNNING_ON_AZURE = Path('C:\\hostedtoolcache').exists()
 IS_RUNNING_ON_TRAVIS = os.environ.get('TRAVIS_OS_NAME') == 'windows'
 
 
-def call(args: Sequence[Union[str, PathLike]], env: Optional[Dict[str, str]] = None,
+def call(args: Sequence[PathOrStr], env: Optional[Dict[str, str]] = None,
          cwd: Optional[str] = None) -> None:
     print('+ ' + ' '.join(str(a) for a in args))
     # we use shell=True here, even though we don't need a shell due to a bug
@@ -44,29 +53,22 @@ class PythonConfiguration(NamedTuple):
     version: str
     arch: str
     identifier: str
-    url: Optional[str]
+    url: Optional[str] = None
 
 
-def get_python_configurations(build_selector: BuildSelector) -> List[PythonConfiguration]:
-    python_configurations = [
-        # CPython
-        PythonConfiguration(version='2.7.18', arch='32', identifier='cp27-win32', url=None),
-        PythonConfiguration(version='2.7.18', arch='64', identifier='cp27-win_amd64', url=None),
-        PythonConfiguration(version='3.5.4', arch='32', identifier='cp35-win32', url=None),
-        PythonConfiguration(version='3.5.4', arch='64', identifier='cp35-win_amd64', url=None),
-        PythonConfiguration(version='3.6.8', arch='32', identifier='cp36-win32', url=None),
-        PythonConfiguration(version='3.6.8', arch='64', identifier='cp36-win_amd64', url=None),
-        PythonConfiguration(version='3.7.9', arch='32', identifier='cp37-win32', url=None),
-        PythonConfiguration(version='3.7.9', arch='64', identifier='cp37-win_amd64', url=None),
-        PythonConfiguration(version='3.8.7', arch='32', identifier='cp38-win32', url=None),
-        PythonConfiguration(version='3.8.7', arch='64', identifier='cp38-win_amd64', url=None),
-        PythonConfiguration(version='3.9.1', arch='32', identifier='cp39-win32', url=None),
-        PythonConfiguration(version='3.9.1', arch='64', identifier='cp39-win_amd64', url=None),
-        # PyPy
-        PythonConfiguration(version='2.7', arch='32', identifier='pp27-win32', url='https://downloads.python.org/pypy/pypy2.7-v7.3.3-win32.zip'),
-        PythonConfiguration(version='3.6', arch='32', identifier='pp36-win32', url='https://downloads.python.org/pypy/pypy3.6-v7.3.3-win32.zip'),
-        PythonConfiguration(version='3.7', arch='32', identifier='pp37-win32', url='https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip'),
-    ]
+def get_python_configurations(
+        build_selector: BuildSelector,
+        architectures: Set[Architecture],
+) -> List[PythonConfiguration]:
+
+    full_python_configs = read_python_configs('windows')
+
+    python_configurations = [PythonConfiguration(**item) for item in full_python_configs]
+
+    map_arch = {
+        '32': Architecture.x86,
+        '64': Architecture.AMD64,
+    }
 
     if IS_RUNNING_ON_TRAVIS:
         # cannot install VCForPython27.msi which is needed for compiling C software
@@ -74,7 +76,10 @@ def get_python_configurations(build_selector: BuildSelector) -> List[PythonConfi
         python_configurations = [c for c in python_configurations if not c.version.startswith('2.7')]
 
     # skip builds as required
-    python_configurations = [c for c in python_configurations if build_selector(c.identifier)]
+    python_configurations = [
+        c for c in python_configurations
+        if build_selector(c.identifier) and map_arch[c.arch] in architectures
+    ]
 
     return python_configurations
 
@@ -108,7 +113,7 @@ def install_pypy(version: str, arch: str, url: str) -> Path:
     return installation_path
 
 
-def setup_python(python_configuration: PythonConfiguration, dependency_constraint_flags: Sequence[Union[str, PathLike]], environment: ParsedEnvironment) -> Dict[str, str]:
+def setup_python(python_configuration: PythonConfiguration, dependency_constraint_flags: Sequence[PathOrStr], environment: ParsedEnvironment) -> Dict[str, str]:
     nuget = Path('C:\\cibw\\nuget.exe')
     if not nuget.exists():
         log.step('Downloading nuget...')
@@ -194,13 +199,15 @@ def pep_518_cp35_workaround(package_dir: Path, env: Dict[str, str]) -> None:
             log.step('Performing PEP518 workaround...')
             with tempfile.TemporaryDirectory() as d:
                 reqfile = Path(d) / "requirements.txt"
-                with reqfile.open("w") as f:
+                with reqfile.open('w') as f:
                     for r in requirements:
                         print(r, file=f)
                 call(['pip', 'install', '-r', reqfile], env=env)
 
 
 def build(options: BuildOptions) -> None:
+    allowed_architectures_check('windows', options)
+
     temp_dir = Path(tempfile.mkdtemp(prefix='cibuildwheel'))
     built_wheel_dir = temp_dir / 'built_wheel'
     repaired_wheel_dir = temp_dir / 'repaired_wheel'
@@ -212,12 +219,12 @@ def build(options: BuildOptions) -> None:
             before_all_prepared = prepare_command(options.before_all, project='.', package=options.package_dir)
             shell(before_all_prepared, env=env)
 
-        python_configurations = get_python_configurations(options.build_selector)
+        python_configurations = get_python_configurations(options.build_selector, options.architectures)
 
         for config in python_configurations:
             log.build_start(config.identifier)
 
-            dependency_constraint_flags: Sequence[Union[str, PathLike]] = []
+            dependency_constraint_flags: Sequence[PathOrStr] = []
             if options.dependency_constraints:
                 dependency_constraint_flags = [
                     '-c', options.dependency_constraints.get_for_python_version(config.version)

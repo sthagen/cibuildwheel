@@ -1,6 +1,6 @@
-import bashlex  # type: ignore
-
 from typing import Dict, List, Mapping, Optional
+
+import bashlex
 
 from . import bashlex_eval
 

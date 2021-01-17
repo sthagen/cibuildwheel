@@ -4,12 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from cibuildwheel import (
-    linux,
-    macos,
-    util,
-    windows,
-)
+from cibuildwheel import linux, macos, util, windows
 
 
 class ArgsInterceptor:
@@ -70,5 +65,14 @@ def platform(request, monkeypatch):
 @pytest.fixture
 def intercepted_build_args(platform, monkeypatch):
     intercepted = ArgsInterceptor()
-    monkeypatch.setattr(globals()[platform], 'build', intercepted)
+
+    if platform == 'linux':
+        monkeypatch.setattr(linux, 'build', intercepted)
+    elif platform == 'macos':
+        monkeypatch.setattr(macos, 'build', intercepted)
+    elif platform == 'windows':
+        monkeypatch.setattr(windows, 'build', intercepted)
+    else:
+        raise ValueError(f'unknown platform value: {platform}')
+
     return intercepted
