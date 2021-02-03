@@ -52,6 +52,16 @@ def test_pinned_versions(tmp_path, python_version):
     if utils.platform == 'linux':
         pytest.skip('linux doesn\'t pin individual tool versions, it pins manylinux images instead')
 
+    if utils.IS_WINDOWS_RUNNING_ON_TRAVIS and python_version == '2.7':
+        pytest.skip('Windows + Travis CI requires a workaround')
+
+    is_running_on_macos_11_or_later = (
+        utils.platform == 'macos' and utils.get_macos_version() >= (10, 16)
+    )
+
+    if is_running_on_macos_11_or_later and python_version == '3.5':
+        pytest.skip('CPython 3.5 doesn\'t work on macOS Big Sur+')
+
     project_dir = tmp_path / 'project'
     project_with_expected_version_checks.generate(project_dir)
 
@@ -113,6 +123,9 @@ def test_pinned_versions(tmp_path, python_version):
 def test_dependency_constraints_file(tmp_path, python_version):
     if utils.platform == 'linux':
         pytest.skip('linux doesn\'t pin individual tool versions, it pins manylinux images instead')
+
+    if utils.IS_WINDOWS_RUNNING_ON_TRAVIS and python_version == '2.7':
+        pytest.skip('Windows + Travis CI requires a workaround')
 
     project_dir = tmp_path / 'project'
     project_with_expected_version_checks.generate(project_dir)

@@ -5,19 +5,23 @@ import textwrap
 import traceback
 from configparser import ConfigParser
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, overload
+from typing import Dict, List, Optional, Set, Union, overload
+
+from packaging.specifiers import SpecifierSet
 
 import cibuildwheel
 import cibuildwheel.linux
 import cibuildwheel.macos
 import cibuildwheel.windows
+from cibuildwheel.architecture import Architecture, allowed_architectures_check
 from cibuildwheel.environment import EnvironmentParseError, parse_environment
+from cibuildwheel.projectfiles import get_requires_python_str
 from cibuildwheel.typing import PLATFORMS, PlatformName, assert_never
 from cibuildwheel.util import (
-    Architecture,
     BuildOptions,
     BuildSelector,
     DependencyConstraints,
+    TestSelector,
     Unbuffered,
     detect_ci_provider,
     resources_dir,
@@ -25,10 +29,10 @@ from cibuildwheel.util import (
 
 
 @overload
-def get_option_from_environment(option_name: str, platform: Optional[str], default: str) -> str: ...  # noqa: E704
+def get_option_from_environment(option_name: str, *, platform: Optional[str] = None, default: str) -> str: ...  # noqa: E704
 @overload
-def get_option_from_environment(option_name: str, platform: Optional[str] = None, default: None = None) -> Optional[str]: ...  # noqa: E704 E302
-def get_option_from_environment(option_name: str, platform: Optional[str] = None, default: Optional[str] = None) -> Optional[str]:  # noqa: E302
+def get_option_from_environment(option_name: str, *, platform: Optional[str] = None, default: None = None) -> Optional[str]: ...  # noqa: E704 E302
+def get_option_from_environment(option_name: str, *, platform: Optional[str] = None, default: Optional[str] = None) -> Optional[str]:  # noqa: E302
     '''
     Returns an option from the environment, optionally scoped by the platform.
 
@@ -76,7 +80,7 @@ def main() -> None:
                             on this machine. Set this option to build an architecture
                             via emulation, for example, using binfmt_misc and QEMU.
                             Default: auto.
-                            Choices: auto, native, all, {}
+                            Choices: auto, auto64, auto32, native, all, {}
                         '''.format(", ".join(a.name for a in Architecture)))
     parser.add_argument('--output-dir',
                         default=os.environ.get('CIBW_OUTPUT_DIR', 'wheelhouse'),
@@ -94,6 +98,9 @@ def main() -> None:
     parser.add_argument('--print-build-identifiers',
                         action='store_true',
                         help='Print the build identifiers matched by the current invocation and exit.')
+    parser.add_argument('--allow-empty',
+                        action='store_true',
+                        help='Do not report an error code if the build does not match any wheels.')
 
     args = parser.parse_args()
 
@@ -110,7 +117,7 @@ def main() -> None:
                 supported. You can run on your development machine or other CI providers using the
                 --platform argument. Check --help output for more information.
             '''), file=sys.stderr)
-            exit(2)
+            sys.exit(2)
         if sys.platform.startswith('linux'):
             platform = 'linux'
         elif sys.platform == 'darwin':
@@ -121,11 +128,11 @@ def main() -> None:
             print('cibuildwheel: Unable to detect platform from "sys.platform" in a CI environment. You can run '
                   'cibuildwheel using the --platform argument. Check --help output for more information.',
                   file=sys.stderr)
-            exit(2)
+            sys.exit(2)
 
     if platform not in PLATFORMS:
         print(f'cibuildwheel: Unsupported platform: {platform}', file=sys.stderr)
-        exit(2)
+        sys.exit(2)
 
     package_dir = Path(args.package_dir)
     output_dir = Path(args.output_dir)
@@ -133,13 +140,14 @@ def main() -> None:
     if platform == 'linux':
         repair_command_default = 'auditwheel repair -w {dest_dir} {wheel}'
     elif platform == 'macos':
-        repair_command_default = 'delocate-listdeps {wheel} && delocate-wheel --require-archs x86_64 -w {dest_dir} {wheel}'
+        repair_command_default = 'delocate-listdeps {wheel} && delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}'
     elif platform == 'windows':
         repair_command_default = ''
     else:
         assert_never(platform)
 
     build_config, skip_config = os.environ.get('CIBW_BUILD', '*'), os.environ.get('CIBW_SKIP', '')
+    test_skip = os.environ.get('CIBW_TEST_SKIP', '')
     environment_config = get_option_from_environment('CIBW_ENVIRONMENT', platform=platform, default='')
     before_all = get_option_from_environment('CIBW_BEFORE_ALL', platform=platform, default='')
     before_build = get_option_from_environment('CIBW_BEFORE_BUILD', platform=platform)
@@ -151,14 +159,26 @@ def main() -> None:
     test_extras = get_option_from_environment('CIBW_TEST_EXTRAS', platform=platform, default='')
     build_verbosity_str = get_option_from_environment('CIBW_BUILD_VERBOSITY', platform=platform, default='')
 
-    build_selector = BuildSelector(build_config, skip_config)
+    package_files = {'setup.py', 'setup.cfg', 'pyproject.toml'}
+
+    if not any(package_dir.joinpath(name).exists() for name in package_files):
+        names = ', '.join(sorted(package_files, reverse=True))
+        print(f'cibuildwheel: Could not find any of {{{names}}} at root of package', file=sys.stderr)
+        sys.exit(2)
+
+    # Passing this in as an environment variable will override pyproject.toml, setup.cfg, or setup.py
+    requires_python_str: Optional[str] = os.environ.get('CIBW_PROJECT_REQUIRES_PYTHON') or get_requires_python_str(package_dir)
+    requires_python = None if requires_python_str is None else SpecifierSet(requires_python_str)
+
+    build_selector = BuildSelector(build_config=build_config, skip_config=skip_config, requires_python=requires_python)
+    test_selector = TestSelector(skip_config=test_skip)
 
     try:
         environment = parse_environment(environment_config)
     except (EnvironmentParseError, ValueError):
         print(f'cibuildwheel: Malformed environment option "{environment_config}"', file=sys.stderr)
         traceback.print_exc(None, sys.stderr)
-        exit(2)
+        sys.exit(2)
 
     if dependency_versions == 'pinned':
         dependency_constraints: Optional[DependencyConstraints] = DependencyConstraints.with_defaults()
@@ -180,20 +200,19 @@ def main() -> None:
     # This needs to be passed on to the docker container in linux.py
     os.environ['CIBUILDWHEEL'] = '1'
 
-    if not any((package_dir / name).exists()
-               for name in ["setup.py", "setup.cfg", "pyproject.toml"]):
-        print('cibuildwheel: Could not find setup.py, setup.cfg or pyproject.toml at root of package', file=sys.stderr)
-        exit(2)
-
     if args.archs is not None:
         archs_config_str = args.archs
     else:
         archs_config_str = get_option_from_environment('CIBW_ARCHS', platform=platform, default='auto')
+
     archs = Architecture.parse_config(archs_config_str, platform=platform)
 
+    identifiers = get_build_identifiers(platform, build_selector, archs)
+
     if args.print_build_identifiers:
-        print_build_identifiers(platform, build_selector, archs)
-        exit(0)
+        for identifier in identifiers:
+            print(identifier)
+        sys.exit(0)
 
     manylinux_images: Optional[Dict[str, str]] = None
     if platform == 'linux':
@@ -236,6 +255,7 @@ def main() -> None:
         before_all=before_all,
         build_verbosity=build_verbosity,
         build_selector=build_selector,
+        test_selector=test_selector,
         repair_command=repair_command,
         environment=environment,
         dependency_constraints=dependency_constraints,
@@ -246,6 +266,17 @@ def main() -> None:
     sys.stdout = Unbuffered(sys.stdout)  # type: ignore
 
     print_preamble(platform, build_options)
+
+    try:
+        allowed_architectures_check(platform, build_options.architectures)
+    except ValueError as err:
+        print("cibuildwheel:", *err.args, file=sys.stderr)
+        sys.exit(4)
+
+    if not identifiers:
+        print(f'cibuildwheel: No build identifiers selected: {build_selector}', file=sys.stderr)
+        if not args.allow_empty:
+            sys.exit(3)
 
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
@@ -271,7 +302,7 @@ def detect_obsolete_options() -> None:
                 os.environ[alternative] = os.environ[deprecated]
             else:
                 print(f"Option '{alternative}' is not empty. Please unset '{deprecated}'")
-                exit(2)
+                sys.exit(2)
 
     # Check for deprecated identifiers in 'CIBW_BUILD' and 'CIBW_SKIP' options
     for option in ['CIBW_BUILD', 'CIBW_SKIP']:
@@ -307,20 +338,23 @@ def print_preamble(platform: str, build_options: BuildOptions) -> None:
     print('\nHere we go!\n')
 
 
-def print_build_identifiers(
-    platform: str, build_selector: BuildSelector, architectures: Set[Architecture]
-) -> None:
+def get_build_identifiers(
+    platform: PlatformName, build_selector: BuildSelector, architectures: Set[Architecture]
+) -> List[str]:
+    python_configurations: Union[List[cibuildwheel.linux.PythonConfiguration],
+                                 List[cibuildwheel.windows.PythonConfiguration],
+                                 List[cibuildwheel.macos.PythonConfiguration]]
 
-    python_configurations: List[Any] = []
     if platform == 'linux':
         python_configurations = cibuildwheel.linux.get_python_configurations(build_selector, architectures)
     elif platform == 'windows':
         python_configurations = cibuildwheel.windows.get_python_configurations(build_selector, architectures)
     elif platform == 'macos':
-        python_configurations = cibuildwheel.macos.get_python_configurations(build_selector)
+        python_configurations = cibuildwheel.macos.get_python_configurations(build_selector, architectures)
+    else:
+        assert_never(platform)
 
-    for config in python_configurations:
-        print(config.identifier)
+    return [config.identifier for config in python_configurations]
 
 
 def detect_warnings(platform: str, build_options: BuildOptions) -> List[str]:

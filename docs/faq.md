@@ -44,6 +44,31 @@ Linux), and the other architectures are emulated automatically.
 {% include "../examples/github-with-qemu.yml" %}
 ```
 
+### Building Apple Silicon wheels on Intel {: #apple-silicon}
+
+`cibuildwheel` supports cross-compiling `universal2` and `arm64` wheels on `x86_64` runners.
+
+These wheels are not built by default, but can be enabled by setting the [`CIBW_ARCHS_MACOS` option](options.md#archs) to `x86_64 arm64 universal2`. Cross-compilation is provided by the Xcode toolchain.
+
+!!! important
+    When cross-compiling on Intel, it is not possible to test `arm64` and the `arm64` part of a `universal2` wheel.
+
+    `cibuildwheel` will raise a warning to notify you of this - these warnings be be silenced by skipping testing on these platforms: `CIBW_TEST_SKIP: *_arm64 *_universal2:arm64`.
+
+Hopefully, this is a temporary situation. Once we have widely available Apple Silicon CI runners, we can build and test `arm64` and `universal2` wheels more natively. That's why `universal2` wheels are not yet built by default, and require opt-in by setting `CIBW_ARCHS_MACOS`.
+
+!!! note
+    Your runner image needs Xcode Command Line Tools 12.2 or later to build `universal2` and `arm64`.
+
+    So far, only CPython 3.9 supports `universal2` and `arm64` wheels.
+
+Here's an example Github Actions workflow with a job that builds for Apple Silicon:
+
+> .github/workflows/build_macos.yml
+```yml
+{% include "../examples/github-apple-silicon.yml" %}
+```
+
 ### Building packages with optional C extensions
 
 `cibuildwheel` defines the environment variable `CIBUILDWHEEL` to the value `1` allowing projects for which the C extension is optional to make it mandatory when building wheels.
@@ -113,10 +138,10 @@ There are two suggested methods for keeping cibuildwheel up to date that instead
 If you use GitHub Actions for builds, you can use cibuildwheel as an action:
 
 ```yaml
-uses: joerick/cibuildwheel@v1.7.4
+uses: joerick/cibuildwheel@v1.8.0
 ```
 
-This is a composite step that just installs and runs cibuildwheel. You can set command-line options as `with:` parameters, and use `env:` as normal.
+This is a composite step that just runs cibuildwheel using pipx. You can set command-line options as `with:` parameters, and use `env:` as normal.
 
 Then, your `dependabot.yml` file could look like this:
 
@@ -139,7 +164,7 @@ The second option, and the only one that supports other CI systems, is using a `
 
 ```bash
 # requirements-cibw.txt
-cibuildwheel==1.7.4
+cibuildwheel==1.8.0
 ```
 
 Then your install step would have `python -m pip install -r requirements-cibw.txt` in it. Your `dependabot.yml` file could look like this:

@@ -64,7 +64,7 @@ Default: `auto`
 
 For `linux` you need Docker running, on macOS or Linux. For `macos`, you need a Mac machine, and note that this script is going to automatically install MacPython on your system, so don't run on your development machine. For `windows`, you need to run in Windows, and `cibuildwheel` will install required versions of Python to `C:\cibw\python` using NuGet.
 
-This option can also be set using the command-line option `--platform`.
+This option can also be set using the [command-line option](#command-line) `--platform`.
 
 
 ### `CIBW_BUILD`, `CIBW_SKIP` {: #build-skip}
@@ -155,33 +155,115 @@ CIBW_SKIP: pp*
   }
 </style>
 
-### `CIBW_ARCHS_LINUX` {: #archs}
-> Build non-native architectures
+### `CIBW_ARCHS` {: #archs}
+> Change the architectures built on your machine by default.
 
-A space-separated list of architectures to build. Use this in conjunction with
-emulation, such as that provided by [docker/setup-qemu-action][setup-qemu-action]
-or [tonistiigi/binfmt][binfmt], to build architectures other than those your
-machine natively supports.
+A space-separated list of architectures to build.
 
-Options: `auto` `native` `all` `x86_64` `i686` `aarch64` `ppc64le` `s390x`
+On macOS, this option can be used to cross-compile between `x86_64`,
+`universal2` and `arm64` for Apple Silicon support.
 
-Default: `auto`, meaning the native archs supported on the build machine. For
-example, on an `x86_64` machine, `auto` expands to `x86_64` and `i686`.
+On Linux, this option can be used to build non-native architectures under
+emulation. See [this guide](faq.md#emulation) for more information.
 
-`native` will only build on the exact architecture you currently are on; it will
-not add `i686` for `x86_64`.
+Options:
 
-`all` will expand to all known architectures; remember to use build selectors
-to limit builds for each job; this list could grow in the future.
+- Linux: `x86_64` `i686` `aarch64` `ppc64le` `s390x`
+- macOS: `x86_64` `arm64` `universal2`
+- Windows: `AMD64` `x86`
+- `auto`: The default archs for your machine - see the table below.
+    - `auto64`: Just the 64-bit auto archs
+    - `auto32`: Just the 32-bit auto archs
+- `native`: the native arch of the build machine - Matches [`platform.machine()`](https://docs.python.org/3/library/platform.html#platform.machine).
+- `all` : expands to all the architectures supported on this OS. You may want
+  to use [CIBW_BUILD](#build-skip) with this option to target specific
+  architectures via build selectors.
+
+Default: `auto`
+
+| Runner | `native` | `auto` | `auto64` | `auto32` |
+|---|---|---|---|---|
+| Linux / Intel | `x86_64` | `x86_64` `i686` | `x86_64` | `i686` |
+| Windows / Intel | `AMD64` | `AMD64` `x86` | `AMD64` | `x86` |
+| macOS / Intel | `x86_64` | `x86_64` | `x86_64` |  |
+| macOS / Apple Silicon | `arm64` | `arm64` `universal2` | `arm64` `universal2`|  |
+
+If not listed above, `auto` is the same as `native`.
 
 [setup-qemu-action]: https://github.com/docker/setup-qemu-action
 [binfmt]: https://hub.docker.com/r/tonistiigi/binfmt
 
+Platform-specific variants also available:<br/>
+ `CIBW_ARCHS_MACOS` | `CIBW_ARCHS_WINDOWS` | `CIBW_ARCHS_LINUX`
+
+This option can also be set using the [command-line option](#command-line) `--archs`.
+
 #### Examples
 
 ```yaml
-# On an intel runner with qemu installed, build Intel and ARM wheels
+# Build `universal2` and `arm64` wheels on an Intel runner.
+# Note that the `arm64` wheel and the `arm64` part of the `universal2`
+# wheel cannot be tested in this configuration.
+CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
+
+# On an Linux Intel runner with qemu installed, build Intel and ARM wheels
 CIBW_ARCHS_LINUX: "auto aarch64"
+```
+
+
+###  `CIBW_PROJECT_REQUIRES_PYTHON` {: #requires-python}
+> Manually set the Python compatibility of your project
+
+By default, cibuildwheel reads your package's Python compatibility from
+`pyproject.toml` following [PEP621](https://www.python.org/dev/peps/pep-0621/)
+or from `setup.cfg`; finally it will try to inspect the AST of `setup.py` for a
+simple keyword assignment in a top level function call. If you need to override
+this behaviour for some reason, you can use this option.
+
+When setting this option, the syntax is the same as `project.requires-python`,
+using 'version specifiers' like `>=3.6`, according to
+[PEP440](https://www.python.org/dev/peps/pep-0440/#version-specifiers).
+
+Default: reads your package's Python compatibility from `pyproject.toml`
+(`project.requires-python`) or `setup.cfg` (`options.python_requires`) or
+`setup.py` `setup(python_requires="...")`. If not found, cibuildwheel assumes
+the package is compatible with all versions of Python that it can build.
+
+
+!!! note
+    Rather than using this option, it's recommended you set
+    `project.requires-python` in `pyproject.toml` instead:
+    Example `pyproject.toml`:
+
+        [project]
+        requires-python = ">=3.6"
+
+        # Aside - in pyproject.toml you should always specify minimal build
+        # system options, like this:
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
+
+    Currently, setuptools has not yet added support for reading this value from
+    pyproject.toml yet, and so does not copy it to Requires-Python in the wheel
+    metadata. This mechanism is used by `pip` to scan through older versions of
+    your package until it finds a release compatible with the curernt version
+    of Python compatible when installing, so it is an important value to set if
+    you plan to drop support for a version of Python in the future.
+
+    If you don't want to list this value twice, you can also use the setuptools
+    specific location in `setup.cfg` and cibuildwheel will detect it from
+    there. Example `setup.cfg`:
+
+        [options]
+        python_requires = ">=3.6"
+
+#### Examples
+
+```yaml
+CIBW_PROJECT_REQUIRES_PYTHON: ">=3.6"
 ```
 
 ## Build customization
@@ -276,20 +358,18 @@ CIBW_BEFORE_BUILD: "{package}/script/prepare_for_build.sh"
 !!! note
     If you need dependencies installed for the build, we recommend using pyproject.toml. This is an example pyproject.toml file:
 
-    ```toml
-    [build-system]
-    requires = [
-        "setuptools>=42",
-        "wheel",
-        "Cython",
-        "numpy==1.11.3; python_version<='3.6'",
-        "numpy==1.14.5; python_version=='3.7'",
-        "numpy==1.17.3; python_version=='3.8'",
-        "numpy==1.19.4; python_version>='3.9'",
-    ]
+        [build-system]
+        requires = [
+            "setuptools>=42",
+            "wheel",
+            "Cython",
+            "numpy==1.11.3; python_version<='3.6'",
+            "numpy==1.14.5; python_version=='3.7'",
+            "numpy==1.17.3; python_version=='3.8'",
+            "numpy==1.19.4; python_version>='3.9'",
+        ]
 
-    build-backend = "setuptools.build_meta"
-    ```
+        build-backend = "setuptools.build_meta"
 
     This [PEP 517][]/[PEP 518][] style build allows you to completely control the
     build environment in cibuildwheel, [PyPA-build][], and pip, doesn't force
@@ -308,7 +388,7 @@ CIBW_BEFORE_BUILD: "{package}/script/prepare_for_build.sh"
 Default:
 
 - on Linux: `'auditwheel repair -w {dest_dir} {wheel}'`
-- on macOS: `'delocate-listdeps {wheel} && delocate-wheel --require-archs x86_64 -w {dest_dir} {wheel}'`
+- on macOS: `'delocate-listdeps {wheel} && delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}'`
 - on Windows: `''`
 
 A shell command to repair a built wheel by copying external library dependencies into the wheel tree and relinking them.
@@ -317,7 +397,8 @@ The command is run on each built wheel (except for pure Python ones) before test
 The following placeholders must be used inside the command and will be replaced by `cibuildwheel`:
 
 - `{wheel}` for the absolute path to the built wheel
-- `{dest_dir}` for the absolute path of the directory where to create the repaired wheel.
+- `{dest_dir}` for the absolute path of the directory where to create the repaired wheel
+- `{delocate_archs}` (macOS only) comma-separated list of architectures in the wheel.
 
 The command is run in a shell, so you can run multiple commands like `cmd1 && cmd2`.
 
@@ -429,10 +510,17 @@ CIBW_DEPENDENCY_VERSIONS: ./constraints.txt
 ### `CIBW_TEST_COMMAND` {: #test-command}
 > Execute a shell command to test each built wheel
 
-Shell command to run tests after the build. The wheel will be installed automatically and available for import from the tests. To ensure the wheel is imported by your tests (instead of your source copy), tests are run from a different directory. Use the placeholders `{project}` and `{package}` when specifying paths in your project.
+Shell command to run tests after the build. The wheel will be installed
+automatically and available for import from the tests. To ensure the wheel is
+imported by your tests (instead of your source copy), tests are run from a
+different directory. Use the placeholders `{project}` and `{package}` when
+specifying paths in your project. If this variable is not set, your wheel will
+not be installed after building.
 
-- `{project}` is an absolute path to the project root - the working directory where cibuildwheel was called.
-- `{package}` is the path to the package being built - the `package_dir` argument supplied to cibuildwheel on the command line.
+- `{project}` is an absolute path to the project root - the working directory
+  where cibuildwheel was called.
+- `{package}` is the path to the package being built - the `package_dir`
+  argument supplied to cibuildwheel on the command line.
 
 The command is run in a shell, so you can write things like `cmd1 && cmd2`.
 
@@ -447,6 +535,9 @@ CIBW_TEST_COMMAND: nosetests {project}/tests
 
 # run the package tests using `pytest`
 CIBW_TEST_COMMAND: pytest {package}/tests
+
+# trigger an install of the package, but run nothing of note
+CIBW_TEST_COMMAND: "echo Wheel installed"
 ```
 
 
@@ -518,6 +609,23 @@ Platform-specific variants also available:<br/>
 CIBW_TEST_EXTRAS: test,qt
 ```
 
+### `CIBW_TEST_SKIP` {: #test-skip}
+> Skip running tests on some builds
+
+This will skip testing on any identifiers that match the given skip patterns (see [`CIBW_SKIP`](#build-skip)). This can be used to mask out tests for wheels that have missing dependencies upstream that are slow or hard to build, or to mask up slow tests on emulated architectures.
+
+With macOS `universal2` wheels, you can also skip the the individual archs inside the wheel using an `:arch` suffix. For example, `cp39-macosx_universal2:x86_64` or `cp39-macosx_universal2:arm64`.
+
+#### Examples
+
+```yaml
+# Will avoid testing on emulated architectures
+CIBW_TEST_SKIP: "*-manylinux_{aarch64,ppc64le,s390x}"
+
+# Skip trying to test arm64 builds on Intel Macs
+CIBW_TEST_SKIP: "*-macosx_arm64 *-macosx_universal2:arm64"
+```
+
 
 ## Other
 
@@ -537,12 +645,12 @@ CIBW_BUILD_VERBOSITY: 1
 ```
 
 
-## Command line options
+## Command line options {: #command-line}
 
 ```text
 usage: cibuildwheel [-h] [--platform {auto,linux,macos,windows}]
                     [--archs ARCHS] [--output-dir OUTPUT_DIR]
-                    [--print-build-identifiers]
+                    [--print-build-identifiers] [--allow-empty]
                     [package_dir]
 
 Build wheels for all the platforms.
@@ -565,23 +673,22 @@ optional arguments:
                         you need to run in Windows, and it will build and test
                         for all versions of Python. Default: auto.
   --archs ARCHS         Comma-separated list of CPU architectures to build
-                        for. If unspecified, builds the architectures natively
-                        supported on this machine. Set this option to build an
-                        architecture via emulation, for example, using
-                        binfmt_misc and qemu. Default: auto Choices: auto,
-                        x86_64, i686, aarch64, ppc64le, s390x, x86, AMD64
+                        for. When set to 'auto', builds the architectures
+                        natively supported on this machine. Set this option to
+                        build an architecture via emulation, for example,
+                        using binfmt_misc and QEMU. Default: auto. Choices:
+                        auto, native, all, x86_64, i686, aarch64, ppc64le,
+                        s390x, x86, AMD64
   --output-dir OUTPUT_DIR
                         Destination folder for the wheels.
   --print-build-identifiers
                         Print the build identifiers matched by the current
                         invocation and exit.
+  --allow-empty         Do not report an error code if the build does not
+                        match any wheels.
 ```
 
 <style>
-  .toctree-l3 {
-    border-left: 10px solid transparent;
-  }
-
   .options-toc {
     display: grid;
     grid-auto-columns: fit-content(20%) 1fr;

@@ -4,15 +4,14 @@ import textwrap
 from pathlib import Path, PurePath
 from typing import List, NamedTuple, Set
 
+from .architecture import Architecture
 from .docker_container import DockerContainer
 from .logger import log
 from .typing import PathOrStr
 from .util import (
-    Architecture,
     BuildOptions,
     BuildSelector,
     NonPlatformWheelError,
-    allowed_architectures_check,
     get_build_verbosity_extra_flags,
     prepare_command,
     read_python_configs,
@@ -49,8 +48,6 @@ def get_python_configurations(
 
 
 def build(options: BuildOptions) -> None:
-    allowed_architectures_check('linux', options)
-
     try:
         subprocess.check_output(['docker', '--version'])
     except Exception:
@@ -58,7 +55,7 @@ def build(options: BuildOptions) -> None:
               'If you\'re building on Travis CI, add `services: [docker]` to your .travis.yml.'
               'If you\'re building on Circle CI in Linux, add a `setup_remote_docker` step to your .circleci/config.yml',
               file=sys.stderr)
-        exit(2)
+        sys.exit(2)
 
     assert options.manylinux_images is not None
     python_configurations = get_python_configurations(options.build_selector, options.architectures)
@@ -97,6 +94,7 @@ def build(options: BuildOptions) -> None:
 
                     env = docker.get_environment()
                     env['PATH'] = f'/opt/python/cp38-cp38/bin:{env["PATH"]}'
+                    env['PIP_DISABLE_PIP_VERSION_CHECK'] = '1'
                     env = options.environment.as_dictionary(env, executor=docker.environment_executor)
 
                     before_all_prepared = prepare_command(options.before_all, project=container_project_path, package=container_package_dir)
@@ -138,12 +136,12 @@ def build(options: BuildOptions) -> None:
                     which_python = docker.call(['which', 'python'], env=env, capture_output=True).strip()
                     if PurePath(which_python) != python_bin / 'python':
                         print("cibuildwheel: python available on PATH doesn't match our installed instance. If you have modified PATH, ensure that you don't overwrite cibuildwheel's entry or insert python above it.", file=sys.stderr)
-                        exit(1)
+                        sys.exit(1)
 
                     which_pip = docker.call(['which', 'pip'], env=env, capture_output=True).strip()
                     if PurePath(which_pip) != python_bin / 'pip':
                         print("cibuildwheel: pip available on PATH doesn't match our installed instance. If you have modified PATH, ensure that you don't overwrite cibuildwheel's entry or insert pip above it.", file=sys.stderr)
-                        exit(1)
+                        sys.exit(1)
 
                     if options.before_build:
                         log.step('Running before_build...')
@@ -183,7 +181,7 @@ def build(options: BuildOptions) -> None:
 
                     repaired_wheels = docker.glob(repaired_wheel_dir, '*.whl')
 
-                    if options.test_command:
+                    if options.test_command and options.test_selector(config.identifier):
                         log.step('Testing wheel...')
 
                         # set up a virtual environment to install and test from, to make sure
@@ -231,9 +229,9 @@ def build(options: BuildOptions) -> None:
                 docker.copy_out(container_output_dir, options.output_dir)
                 log.step_end()
         except subprocess.CalledProcessError as error:
-            log.error(f'Command {error.cmd} failed with code {error.returncode}. {error.stdout}')
+            log.step_end_with_error(f'Command {error.cmd} failed with code {error.returncode}. {error.stdout}')
             troubleshoot(options.package_dir, error)
-            exit(1)
+            sys.exit(1)
 
 
 def troubleshoot(package_dir: Path, error: Exception) -> None:
