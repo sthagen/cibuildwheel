@@ -10,44 +10,72 @@ your CI config.
 For example, to configure cibuildwheel to run tests, add the following YAML to
 your CI config file:
 
-> .travis.yml ([docs](https://docs.travis-ci.com/user/environment-variables/))
-```yaml
-env:
-  global:
-    - CIBW_TEST_REQUIRES=pytest
-    - CIBW_TEST_COMMAND="pytest {project}/tests"
-```
 
-> appveyor.yml ([docs](https://www.appveyor.com/docs/build-configuration/#environment-variables))
-```yaml
-environment:
-  global:
-    CIBW_TEST_REQUIRES: pytest
-    CIBW_TEST_COMMAND: "pytest {project}\\tests"
-```
+!!! tab "GitHub Actions"
 
-> .circleci/config.yml ([docs](https://circleci.com/docs/2.0/configuration-reference/#environment))
-```yaml
-jobs:
-  job_name:
-    environment:
+    > .github/workflows/*.yml ([docs](https://help.github.com/en/actions/configuring-and-managing-workflows/using-environment-variables)) (can be global, in job, or in step)
+
+    ```yaml
+    env:
       CIBW_TEST_REQUIRES: pytest
       CIBW_TEST_COMMAND: "pytest {project}/tests"
-```
+    ```
 
-> azure-pipelines.yml ([docs](https://docs.microsoft.com/en-us/azure/devops/pipelines/process/variables))
-```yaml
-variables:
-  CIBW_TEST_REQUIRES: pytest
-  CIBW_TEST_COMMAND: "pytest {project}/tests"
-```
+!!! tab "Azure Pipelines"
 
-> .github/workflows/*.yml ([docs](https://help.github.com/en/actions/configuring-and-managing-workflows/using-environment-variables)) (can be global, in job, or in step)
-```yaml
-env:
-  CIBW_TEST_REQUIRES: pytest
-  CIBW_TEST_COMMAND: "pytest {project}/tests"
-```
+    > azure-pipelines.yml ([docs](https://docs.microsoft.com/en-us/azure/devops/pipelines/process/variables))
+
+    ```yaml
+    variables:
+      CIBW_TEST_REQUIRES: pytest
+      CIBW_TEST_COMMAND: "pytest {project}/tests"
+    ```
+
+!!! tab "Travis CI"
+
+    > .travis.yml ([docs](https://docs.travis-ci.com/user/environment-variables/))
+
+    ```yaml
+    env:
+      global:
+        - CIBW_TEST_REQUIRES=pytest
+        - CIBW_TEST_COMMAND="pytest {project}/tests"
+    ```
+
+!!! tab "AppVeyor"
+
+    > appveyor.yml ([docs](https://www.appveyor.com/docs/build-configuration/#environment-variables))
+
+    ```yaml
+    environment:
+      global:
+        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_COMMAND: "pytest {project}\\tests"
+    ```
+
+!!! tab "CircleCI"
+
+    > .circleci/config.yml ([docs](https://circleci.com/docs/2.0/configuration-reference/#environment))
+
+    ```yaml
+    jobs:
+      job_name:
+        environment:
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: "pytest {project}/tests"
+    ```
+
+!!! tab "Gitlab CI"
+
+    > .gitlab-ci.yml ([docs](https://docs.gitlab.com/ee/ci/variables/README.html#create-a-custom-variable-in-gitlab-ciyml))
+
+    ```yaml
+    linux:
+      variables:
+        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_COMMAND: "pytest {project}/tests"
+    ```
+
 
 
 ## Build selection
@@ -79,17 +107,17 @@ When setting the options, you can use shell-style globbing syntax, as per [`fnma
 
 <div class="build-id-table-marker"></div>
 
-|                 | macOS 64bit         | Manylinux x86 64bit    | Manylinux x86 32bit  | Windows 64bit   | Windows 32bit  | Manylinux Armv8 64bit  | Manylinux PPC64LE      | Manylinux s390x      |
-|-----------------|---------------------|------------------------|----------------------|-----------------|----------------|------------------------|------------------------|----------------------|
-| Python 2.7      | cp27-macosx_x86_64  | cp27-manylinux_x86_64  | cp27-manylinux_i686  | cp27-win_amd64  | cp27-win32     |                        |                        |                      |
-| Python 3.5      | cp35-macosx_x86_64  | cp35-manylinux_x86_64  | cp35-manylinux_i686  | cp35-win_amd64  | cp35-win32     | cp35-manylinux_aarch64 | cp35-manylinux_ppc64le | cp35-manylinux_s390x |
-| Python 3.6      | cp36-macosx_x86_64  | cp36-manylinux_x86_64  | cp36-manylinux_i686  | cp36-win_amd64  | cp36-win32     | cp36-manylinux_aarch64 | cp36-manylinux_ppc64le | cp36-manylinux_s390x |
-| Python 3.7      | cp37-macosx_x86_64  | cp37-manylinux_x86_64  | cp37-manylinux_i686  | cp37-win_amd64  | cp37-win32     | cp37-manylinux_aarch64 | cp37-manylinux_ppc64le | cp37-manylinux_s390x |
-| Python 3.8      | cp38-macosx_x86_64  | cp38-manylinux_x86_64  | cp38-manylinux_i686  | cp38-win_amd64  | cp38-win32     | cp38-manylinux_aarch64 | cp38-manylinux_ppc64le | cp38-manylinux_s390x |
-| Python 3.9      | cp39-macosx_x86_64  | cp39-manylinux_x86_64  | cp39-manylinux_i686  | cp39-win_amd64  | cp39-win32     | cp39-manylinux_aarch64 | cp39-manylinux_ppc64le | cp39-manylinux_s390x |
-| PyPy 2.7 v7.3.3 | pp27-macosx_x86_64  | pp27-manylinux_x86_64  |                      |                 | pp27-win32     |                        |                        |                      |
-| PyPy 3.6 v7.3.3 | pp36-macosx_x86_64  | pp36-manylinux_x86_64  |                      |                 | pp36-win32     |                        |                        |                      |
-| PyPy 3.7 (beta) v7.3.3 | pp37-macosx_x86_64  | pp37-manylinux_x86_64  |               |                 | pp37-win32     |                        |                        |                      |
+|              | macOS                                                               | Windows                       | Manylinux Intel                               | Manylinux Other                                                            |
+|--------------|---------------------------------------------------------------------|-------------------------------|-----------------------------------------------|----------------------------------------------------------------------------|
+| Python 2.7   | cp27-macosx_x86_64                                                  | cp27-win_amd64<br/>cp27-win32 | cp27-manylinux_x86_64<br/>cp27-manylinux_i686 |                                                                            |
+| Python 3.5   | cp35-macosx_x86_64                                                  | cp35-win_amd64<br/>cp35-win32 | cp35-manylinux_x86_64<br/>cp35-manylinux_i686 | cp35-manylinux_aarch64<br/>cp35-manylinux_ppc64le<br/>cp35-manylinux_s390x |
+| Python 3.6   | cp36-macosx_x86_64                                                  | cp36-win_amd64<br/>cp36-win32 | cp36-manylinux_x86_64<br/>cp36-manylinux_i686 | cp36-manylinux_aarch64<br/>cp36-manylinux_ppc64le<br/>cp36-manylinux_s390x |
+| Python 3.7   | cp37-macosx_x86_64                                                  | cp37-win_amd64<br/>cp37-win32 | cp37-manylinux_x86_64<br/>cp37-manylinux_i686 | cp37-manylinux_aarch64<br/>cp37-manylinux_ppc64le<br/>cp37-manylinux_s390x |
+| Python 3.8   | cp38-macosx_x86_64                                                  | cp38-win_amd64<br/>cp38-win32 | cp38-manylinux_x86_64<br/>cp38-manylinux_i686 | cp38-manylinux_aarch64<br/>cp38-manylinux_ppc64le<br/>cp38-manylinux_s390x |
+| Python 3.9   | cp39-macosx_x86_64<br/>cp39-macosx_universal2<br/>cp39-macosx_arm64 | cp39-win_amd64<br/>cp39-win32 | cp39-manylinux_x86_64<br/>cp39-manylinux_i686 | cp39-manylinux_aarch64<br/>cp39-manylinux_ppc64le<br/>cp39-manylinux_s390x |
+| PyPy2.7 v7.3 | pp27-macosx_x86_64                                                  |                    pp27-win32 | pp27-manylinux_x86_64                         |                                                                            |
+| PyPy3.6 v7.3 | pp36-macosx_x86_64                                                  |                    pp36-win32 | pp36-manylinux_x86_64                         |                                                                            |
+| PyPy3.7 v7.3 | pp37-macosx_x86_64                                                  |                    pp37-win32 | pp37-manylinux_x86_64                         |                                                                            |
 
 
 The list of supported and currently selected build identifiers can also be retrieved by passing the `--print-build-identifiers` flag to `cibuildwheel`.
@@ -356,27 +384,26 @@ CIBW_BEFORE_BUILD: "{package}/script/prepare_for_build.sh"
 ```
 
 !!! note
-    If you need dependencies installed for the build, we recommend using pyproject.toml. This is an example pyproject.toml file:
+    If you need dependencies installed for the build, we recommend using
+    `pyproject.toml`. This is an example `pyproject.toml` file:
 
         [build-system]
         requires = [
             "setuptools>=42",
             "wheel",
             "Cython",
-            "numpy==1.11.3; python_version<='3.6'",
-            "numpy==1.14.5; python_version=='3.7'",
-            "numpy==1.17.3; python_version=='3.8'",
-            "numpy==1.19.4; python_version>='3.9'",
+            "numpy==1.13.3; python_version<'3.5'",
+            "oldest-supported-numpy; python_version>='3.5'",
         ]
 
         build-backend = "setuptools.build_meta"
 
-    This [PEP 517][]/[PEP 518][] style build allows you to completely control the
-    build environment in cibuildwheel, [PyPA-build][], and pip, doesn't force
-    downstream users to install anything they don't need, and lets you do more
-    complex pinning (Cython, for example, requires a wheel to be built with an
-    equal or earlier version of NumPy; pinning in this way is the only way to
-    ensure your module works on all available NumPy versions).
+    This [PEP 517][]/[PEP 518][] style build allows you to completely control
+    the build environment in cibuildwheel, [PyPA-build][], and pip, doesn't
+    force downstream users to install anything they don't need, and lets you do
+    more complex pinning (Cython, for example, requires a wheel to be built
+    with an equal or earlier version of NumPy; pinning in this way is the only
+    way to ensure your module works on all available NumPy versions).
 
     [PyPA-build]: https://pypa-build.readthedocs.io/en/latest/
     [PEP 517]: https://www.python.org/dev/peps/pep-0517/
@@ -421,14 +448,14 @@ CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair --lib-sdir . -w {dest_dir} {
 
 An alternative Docker image to be used for building [`manylinux`](https://github.com/pypa/manylinux) wheels. `cibuildwheel` will then pull these instead of the default images, [`quay.io/pypa/manylinux2010_x86_64`](https://quay.io/pypa/manylinux2010_x86_64), [`quay.io/pypa/manylinux2010_i686`](https://quay.io/pypa/manylinux2010_i686), [`pypywheels/manylinux2010-pypy_x86_64`](https://hub.docker.com/r/pypywheels/manylinux2010-pypy_x86_64), [`quay.io/pypa/manylinux2014_aarch64`](https://quay.io/pypa/manylinux2014_aarch64), [`quay.io/pypa/manylinux2014_ppc64le`](https://quay.io/pypa/manylinux2014_ppc64le), and [`quay.io/pypa/manylinux2014_s390x`](https://quay.io/pypa/manylinux2010_s390x).
 
-The value of this option can either be set to `manylinux1`, `manylinux2010` or `manylinux2014` to use a pinned version of the [official `manylinux` images](https://github.com/pypa/manylinux) and [PyPy `manylinux` images](https://github.com/pypy/manylinux). Alternatively, set these options to any other valid Docker image name. Note that for PyPy, only the official `manylinux2010` image is currently available. For architectures other
-than x86 (x86\_64 and i686) manylinux2014 must be used because this is the first version of the manylinux specification that supports additional architectures.
+The value of this option can either be set to `manylinux1`, `manylinux2010`, `manylinux2014` or `manylinux_2_24` to use a pinned version of the [official `manylinux` images](https://github.com/pypa/manylinux) and [PyPy `manylinux` images](https://github.com/pypy/manylinux). Alternatively, set these options to any other valid Docker image name. Note that for PyPy, only the official `manylinux2010` image is currently available. For architectures other
+than x86 (x86\_64 and i686) `manylinux2014` or `manylinux_2_24` must be used because the first version of the manylinux specification that supports additional architectures is `manylinux2014`.
 
-Beware to specify a valid Docker image that can be used in the same way as the official, default Docker images: all necessary Python and pip versions need to be present in `/opt/python/`, and the `auditwheel` tool needs to be present for `cibuildwheel` to work. Apart from that, the architecture and relevant shared system libraries need to be manylinux1-, manylinux2010- or manylinux2014-compatible in order to produce valid `manylinux1`/`manylinux2010`/`manylinux2014` wheels (see [pypa/manylinux on GitHub](https://github.com/pypa/manylinux), [PEP 513](https://www.python.org/dev/peps/pep-0513/), [PEP 571](https://www.python.org/dev/peps/pep-0571/) and [PEP 599](https://www.python.org/dev/peps/pep-0599/) for more details).
+Beware to specify a valid Docker image that can be used in the same way as the official, default Docker images: all necessary Python and pip versions need to be present in `/opt/python/`, and the `auditwheel` tool needs to be present for `cibuildwheel` to work. Apart from that, the architecture and relevant shared system libraries need to be manylinux1-, manylinux2010- or manylinux2014-compatible in order to produce valid `manylinux1`/`manylinux2010`/`manylinux2014`/`manylinux_2_24` wheels (see [pypa/manylinux on GitHub](https://github.com/pypa/manylinux), [PEP 513](https://www.python.org/dev/peps/pep-0513/), [PEP 571](https://www.python.org/dev/peps/pep-0571/), [PEP 599](https://www.python.org/dev/peps/pep-0599/) and  [PEP 600](https://www.python.org/dev/peps/pep-0600/)  for more details).
 
 Note that `auditwheel` detects the version of the `manylinux` standard in the Docker image through the `AUDITWHEEL_PLAT` environment variable, as `cibuildwheel` has no way of detecting the correct `--plat` command line argument to pass to `auditwheel` for a custom image. If a Docker image does not correctly set this `AUDITWHEEL_PLAT` environment variable, the `CIBW_ENVIRONMENT` option can be used to do so (e.g., `CIBW_ENVIRONMENT='AUDITWHEEL_PLAT="manylinux2010_$(uname -m)"'`).
 
-Note that `manylinux2014` doesn't support builds with Python 2.7 - when building with `manylinux2014`, skip Python 2.7 using `CIBW_SKIP` (see example below).
+Note that `manylinux2014`/`manylinux_2_24` don't support builds with Python 2.7 - when building with `manylinux2014`/`manylinux_2_24`, skip Python 2.7 using `CIBW_SKIP` (see example below).
 
 #### Examples
 
@@ -691,12 +718,13 @@ optional arguments:
 <style>
   .options-toc {
     display: grid;
-    grid-auto-columns: fit-content(20%) 1fr;
+    grid-template-columns: fit-content(20%) 1fr;
     grid-gap: 16px 32px;
     gap: 16px 32px;
     font-size: 90%;
     margin-bottom: 28px;
     margin-top: 28px;
+    overflow-x: auto;
   }
   .options-toc .header {
     grid-column: 1 / 3;

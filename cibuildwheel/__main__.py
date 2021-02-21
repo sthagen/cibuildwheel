@@ -147,7 +147,8 @@ def main() -> None:
     else:
         assert_never(platform)
 
-    build_config, skip_config = os.environ.get('CIBW_BUILD', '*'), os.environ.get('CIBW_SKIP', '')
+    build_config = os.environ.get('CIBW_BUILD') or '*'
+    skip_config = os.environ.get('CIBW_SKIP', '')
     test_skip = os.environ.get('CIBW_TEST_SKIP', '')
     environment_config = get_option_from_environment('CIBW_ENVIRONMENT', platform=platform, default='')
     before_all = get_option_from_environment('CIBW_BEFORE_ALL', platform=platform, default='')
@@ -282,7 +283,7 @@ def main() -> None:
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
 
-    with cibuildwheel.util.print_new_wheels("{n} wheels produced in {m:.0f} minutes:", output_dir):
+    with cibuildwheel.util.print_new_wheels("\n{n} wheels produced in {m:.0f} minutes:", output_dir):
         if platform == 'linux':
             cibuildwheel.linux.build(build_options)
         elif platform == 'windows':
