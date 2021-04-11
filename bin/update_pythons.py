@@ -91,12 +91,11 @@ class WindowsVersions:
 
         version = versions[-1]
         identifier = f"cp{version.major}{version.minor}-{self.arch}"
-        result = ConfigWinCP(
+        return ConfigWinCP(
             identifier=identifier,
             version=str(version),
             arch=self.arch_str,
         )
-        return result
 
 
 class PyPyVersions:
@@ -181,7 +180,7 @@ class CPythonVersions:
                 self.versions_dict[version] = uri
 
     def update_version_macos(self, identifier: str, spec: Specifier) -> Optional[ConfigMacOS]:
-        file_idents = ("macos11.0.pkg", "macosx10.9.pkg", "macosx10.6.pkg")
+        file_idents = ("macos11.pkg", "macosx10.9.pkg", "macosx10.6.pkg")
         sorted_versions = sorted(v for v in self.versions_dict if spec.contains(v))
 
         for version in reversed(sorted_versions):
