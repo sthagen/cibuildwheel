@@ -6,7 +6,7 @@ jobs:
     - bash: |
         set -o errexit
         python3 -m pip install --upgrade pip
-        pip3 install cibuildwheel==1.10.0
+        pip3 install cibuildwheel==2.0.0b2
       displayName: Install dependencies
     - bash: cibuildwheel --output-dir wheelhouse .
       displayName: Build wheels
@@ -20,7 +20,7 @@ jobs:
     - bash: |
         set -o errexit
         python3 -m pip install --upgrade pip
-        python3 -m pip install cibuildwheel==1.10.0
+        python3 -m pip install cibuildwheel==2.0.0b2
       displayName: Install dependencies
     - bash: cibuildwheel --output-dir wheelhouse .
       displayName: Build wheels
@@ -31,12 +31,10 @@ jobs:
   pool: {vmImage: 'vs2017-win2016'}
   steps:
     - task: UsePythonVersion@0
-    - script: choco install vcpython27 -f -y
-      displayName: Install Visual C++ for Python 2.7
     - bash: |
         set -o errexit
         python -m pip install --upgrade pip
-        pip install cibuildwheel==1.10.0
+        pip install cibuildwheel==2.0.0b2
       displayName: Install dependencies
     - bash: cibuildwheel --output-dir wheelhouse .
       displayName: Build wheels

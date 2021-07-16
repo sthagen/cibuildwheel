@@ -1,7 +1,9 @@
 from . import test_projects, utils
 
 before_test_project = test_projects.new_c_project()
-before_test_project.files['test/spam_test.py'] = r'''
+before_test_project.files[
+    "test/spam_test.py"
+] = r"""
 import sys
 import os
 from unittest import TestCase
@@ -30,28 +32,31 @@ class TestBeforeTest(TestCase):
         #  vssadm~1 instead of vssadministrator
 
         assert os.stat(stored_prefix) == os.stat(sys.prefix)
-'''
+"""
 
 
 def test(tmp_path):
-    project_dir = tmp_path / 'project'
+    project_dir = tmp_path / "project"
     before_test_project.generate(project_dir)
-    test_project_dir = project_dir / 'dependency'
+    test_project_dir = project_dir / "dependency"
     test_projects.new_c_project().generate(test_project_dir)
 
     # build the wheels
-    actual_wheels = utils.cibuildwheel_run(project_dir, add_env={
-        # write python version information to a temporary file, this is
-        # checked in setup.py
-        'CIBW_BEFORE_TEST': '''python -c "import sys; open('/tmp/pythonversion.txt', 'w').write(sys.version)" && python -c "import sys; open('/tmp/pythonprefix.txt', 'w').write(sys.prefix)" && python -m pip install {project}/dependency''',
-        'CIBW_BEFORE_TEST_WINDOWS': '''python -c "import sys; open('c:\\pythonversion.txt', 'w').write(sys.version)" && python -c "import sys; open('c:\\pythonprefix.txt', 'w').write(sys.prefix)" && python -m pip install {project}/dependency''',
-        'CIBW_TEST_REQUIRES': 'nose',
-        # the 'false ||' bit is to ensure this command runs in a shell on
-        # mac/linux.
-        'CIBW_TEST_COMMAND': 'false || nosetests {project}/test',
-        'CIBW_TEST_COMMAND_WINDOWS': 'nosetests {project}/test',
-    })
+    actual_wheels = utils.cibuildwheel_run(
+        project_dir,
+        add_env={
+            # write python version information to a temporary file, this is
+            # checked in setup.py
+            "CIBW_BEFORE_TEST": """python -c "import sys; open('/tmp/pythonversion.txt', 'w').write(sys.version)" && python -c "import sys; open('/tmp/pythonprefix.txt', 'w').write(sys.prefix)" && python -m pip install {project}/dependency""",
+            "CIBW_BEFORE_TEST_WINDOWS": """python -c "import sys; open('c:\\pythonversion.txt', 'w').write(sys.version)" && python -c "import sys; open('c:\\pythonprefix.txt', 'w').write(sys.prefix)" && python -m pip install {project}/dependency""",
+            "CIBW_TEST_REQUIRES": "pytest",
+            # the 'false ||' bit is to ensure this command runs in a shell on
+            # mac/linux.
+            "CIBW_TEST_COMMAND": "false || pytest {project}/test",
+            "CIBW_TEST_COMMAND_WINDOWS": "pytest {project}/test",
+        },
+    )
 
     # also check that we got the right wheels
-    expected_wheels = utils.expected_wheels('spam', '0.1.0')
+    expected_wheels = utils.expected_wheels("spam", "0.1.0")
     assert set(actual_wheels) == set(expected_wheels)

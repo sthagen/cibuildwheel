@@ -35,9 +35,8 @@ class Analyzer(ast.NodeVisitor):
         if node.arg == "python_requires":
             # Must not be nested in an if or other structure
             # This will be Module -> Expr -> Call -> keyword
-            if (
-                not hasattr(node.parent.parent.parent, "parent")  # type: ignore
-                and isinstance(node.value, Constant)
+            if not hasattr(node.parent.parent.parent, "parent") and isinstance(  # type: ignore
+                node.value, Constant
             ):
                 self.requires_python = get_constant(node.value)
 
@@ -57,21 +56,21 @@ def get_requires_python_str(package_dir: Path) -> Optional[str]:
 
     # Read in from pyproject.toml:project.requires-python
     try:
-        info = toml.load(package_dir / 'pyproject.toml')
-        return str(info['project']['requires-python'])
+        info = toml.load(package_dir / "pyproject.toml")
+        return str(info["project"]["requires-python"])
     except (FileNotFoundError, KeyError, IndexError, TypeError):
         pass
 
     # Read in from setup.cfg:options.python_requires
     try:
         config = ConfigParser()
-        config.read(package_dir / 'setup.cfg')
-        return str(config['options']['python_requires'])
+        config.read(package_dir / "setup.cfg")
+        return str(config["options"]["python_requires"])
     except (FileNotFoundError, KeyError, IndexError, TypeError):
         pass
 
     try:
-        with open(package_dir / 'setup.py') as f:
+        with open(package_dir / "setup.py") as f:
             return setup_py_python_requires(f.read())
     except FileNotFoundError:
         pass

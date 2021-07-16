@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import copy
 import difflib
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any, Union
 
 import click
 import requests
@@ -77,23 +79,26 @@ class WindowsVersions:
         response.raise_for_status()
         cp_info = response.json()
 
-        versions = (Version(v) for v in cp_info["versions"])
-        self.versions = sorted(v for v in versions if not v.is_devrelease)
+        self.version_dict = {Version(v): v for v in cp_info["versions"]}
 
-    def update_version_windows(self, spec: Specifier) -> Optional[ConfigWinCP]:
-        versions = sorted(v for v in self.versions if spec.contains(v))
-        if not all(v.is_prerelease for v in versions):
-            versions = [v for v in versions if not v.is_prerelease]
+    def update_version_windows(self, spec: Specifier) -> ConfigWinCP | None:
+
+        # Specifier.filter selects all non pre-releases that match the spec,
+        # unless there are only pre-releases, then it selects pre-releases
+        # instead (like pip)
+        unsorted_versions = spec.filter(self.version_dict)
+        versions = sorted(unsorted_versions, reverse=True)
+
         log.debug(f"Windows {self.arch} {spec} has {', '.join(str(v) for v in versions)}")
 
         if not versions:
             return None
 
-        version = versions[-1]
+        version = versions[0]
         identifier = f"cp{version.major}{version.minor}-{self.arch}"
         return ConfigWinCP(
             identifier=identifier,
-            version=str(version),
+            version=self.version_dict[version],
             arch=self.arch_str,
         )
 
@@ -110,30 +115,39 @@ class PyPyVersions:
             release["python_version"] = Version(release["python_version"])
 
         self.releases = [
-            r for r in releases if not r["pypy_version"].is_prerelease and not r["pypy_version"].is_devrelease
+            r
+            for r in releases
+            if not r["pypy_version"].is_prerelease and not r["pypy_version"].is_devrelease
         ]
         self.arch = arch_str
 
-    def update_version_windows(self, spec: Specifier) -> ConfigWinCP:
-        if self.arch != "32":
-            raise RuntimeError("64 bit releases not supported yet on Windows")
+    def get_arch_file(self, release: dict[str, Any]) -> str:
+        urls: list[str] = [
+            rf["download_url"]
+            for rf in release["files"]
+            if "" in rf["platform"] == f"win{self.arch}"
+        ]
+        return urls[0] if urls else ""
 
+    def update_version_windows(self, spec: Specifier) -> ConfigWinCP:
         releases = [r for r in self.releases if spec.contains(r["python_version"])]
-        releases = sorted(releases, key=lambda r: r["pypy_version"])
+        releases = sorted(releases, key=lambda r: r["pypy_version"])  # type: ignore
+        releases = [r for r in releases if self.get_arch_file(r)]
 
         if not releases:
             raise RuntimeError(f"PyPy Win {self.arch} not found for {spec}! {self.releases}")
 
+        version_arch = "win32" if self.arch == "32" else "win_amd64"
+
         release = releases[-1]
         version = release["python_version"]
-        identifier = f"pp{version.major}{version.minor}-win32"
-
-        (url,) = [rf["download_url"] for rf in release["files"] if "" in rf["platform"] == "win32"]
+        identifier = f"pp{version.major}{version.minor}-{version_arch}"
+        url = self.get_arch_file(release)
 
         return ConfigWinPP(
             identifier=identifier,
             version=f"{version.major}.{version.minor}",
-            arch="32",
+            arch=self.arch,
             url=url,
         )
 
@@ -142,7 +156,7 @@ class PyPyVersions:
             raise RuntimeError("Other archs not supported yet on macOS")
 
         releases = [r for r in self.releases if spec.contains(r["python_version"])]
-        releases = sorted(releases, key=lambda r: r["pypy_version"])
+        releases = sorted(releases, key=lambda r: r["pypy_version"])  # type: ignore
 
         if not releases:
             raise RuntimeError(f"PyPy macOS {self.arch} not found for {spec}!")
@@ -151,9 +165,11 @@ class PyPyVersions:
         version = release["python_version"]
         identifier = f"pp{version.major}{version.minor}-macosx_x86_64"
 
-        (url,) = [
-            rf["download_url"] for rf in release["files"] if "" in rf["platform"] == "darwin" and rf["arch"] == "x64"
-        ]
+        (url,) = (
+            rf["download_url"]
+            for rf in release["files"]
+            if "" in rf["platform"] == "darwin" and rf["arch"] == "x64"
+        )
 
         return ConfigMacOS(
             identifier=identifier,
@@ -165,39 +181,50 @@ class PyPyVersions:
 class CPythonVersions:
     def __init__(self) -> None:
 
-        response = requests.get("https://www.python.org/api/v2/downloads/release/?is_published=true")
+        response = requests.get(
+            "https://www.python.org/api/v2/downloads/release/?is_published=true"
+        )
         response.raise_for_status()
 
         releases_info = response.json()
 
-        self.versions_dict: Dict[Version, int] = {}
+        self.versions_dict: dict[Version, int] = {}
         for release in releases_info:
             # Removing the prefix, Python 3.9 would use: release["name"].removeprefix("Python ")
             version = Version(release["name"][7:])
 
-            if not version.is_prerelease and not version.is_devrelease:
-                uri = int(release["resource_uri"].rstrip("/").split("/")[-1])
-                self.versions_dict[version] = uri
+            uri = int(release["resource_uri"].rstrip("/").split("/")[-1])
+            self.versions_dict[version] = uri
 
-    def update_version_macos(self, identifier: str, spec: Specifier) -> Optional[ConfigMacOS]:
-        file_idents = ("macos11.pkg", "macosx10.9.pkg", "macosx10.6.pkg")
-        sorted_versions = sorted(v for v in self.versions_dict if spec.contains(v))
+    def update_version_macos(
+        self, identifier: str, version: Version, spec: Specifier
+    ) -> ConfigMacOS | None:
 
-        for version in reversed(sorted_versions):
+        # see note above on Specifier.filter
+        unsorted_versions = spec.filter(self.versions_dict)
+        sorted_versions = sorted(unsorted_versions, reverse=True)
+
+        if version <= Version("3.8.9999"):
+            file_ident = "macosx10.9.pkg"
+        else:
+            file_ident = "macos11.pkg"
+
+        for new_version in sorted_versions:
             # Find the first patch version that contains the requested file
-            uri = self.versions_dict[version]
-            response = requests.get(f"https://www.python.org/api/v2/downloads/release_file/?release={uri}")
+            uri = self.versions_dict[new_version]
+            response = requests.get(
+                f"https://www.python.org/api/v2/downloads/release_file/?release={uri}"
+            )
             response.raise_for_status()
             file_info = response.json()
 
-            for file_ident in file_idents:
-                urls = [rf["url"] for rf in file_info if file_ident in rf["url"]]
-                if urls:
-                    return ConfigMacOS(
-                        identifier=identifier,
-                        version=f"{version.major}.{version.minor}",
-                        url=urls[0],
-                    )
+            urls = [rf["url"] for rf in file_info if file_ident in rf["url"]]
+            if urls:
+                return ConfigMacOS(
+                    identifier=identifier,
+                    version=f"{new_version.major}.{new_version.minor}",
+                    url=urls[0],
+                )
 
         return None
 
@@ -210,39 +237,36 @@ class AllVersions:
     def __init__(self) -> None:
         self.windows_32 = WindowsVersions("32")
         self.windows_64 = WindowsVersions("64")
-        self.windows_pypy = PyPyVersions("32")
+        self.windows_pypy_64 = PyPyVersions("64")
 
         self.macos_cpython = CPythonVersions()
         self.macos_pypy = PyPyVersions("64")
 
-    def update_config(self, config: Dict[str, str]) -> None:
+    def update_config(self, config: dict[str, str]) -> None:
         identifier = config["identifier"]
         version = Version(config["version"])
         spec = Specifier(f"=={version.major}.{version.minor}.*")
         log.info(f"Reading in '{identifier}' -> {spec} @ {version}")
         orig_config = copy.copy(config)
-        config_update: Optional[AnyConfig]
+        config_update: AnyConfig | None = None
 
         # We need to use ** in update due to MyPy (probably a bug)
         if "macos" in identifier:
-            if identifier.startswith("pp"):
+            if identifier.startswith("cp"):
+                config_update = self.macos_cpython.update_version_macos(identifier, version, spec)
+            elif identifier.startswith("pp"):
                 config_update = self.macos_pypy.update_version_macos(spec)
-            else:
-                config_update = self.macos_cpython.update_version_macos(identifier, spec)
-
-            assert config_update is not None, f"MacOS {spec} not found!"
-            config.update(**config_update)
         elif "win32" in identifier:
-            if identifier.startswith("pp"):
-                config.update(**self.windows_pypy.update_version_windows(spec))
-            else:
+            if identifier.startswith("cp"):
                 config_update = self.windows_32.update_version_windows(spec)
-                if config_update:
-                    config.update(**config_update)
         elif "win_amd64" in identifier:
-            config_update = self.windows_64.update_version_windows(spec)
-            if config_update:
-                config.update(**config_update)
+            if identifier.startswith("cp"):
+                config_update = self.windows_64.update_version_windows(spec)
+            elif identifier.startswith("pp"):
+                config_update = self.windows_pypy_64.update_version_windows(spec)
+
+        assert config_update is not None, f"{identifier} not found!"
+        config.update(**config_update)
 
         if config != orig_config:
             log.info(f"  Updated {orig_config} to {config}")
@@ -250,7 +274,9 @@ class AllVersions:
 
 @click.command()
 @click.option("--force", is_flag=True)
-@click.option("--level", default="INFO", type=click.Choice(["INFO", "DEBUG", "TRACE"], case_sensitive=False))
+@click.option(
+    "--level", default="INFO", type=click.Choice(["WARNING", "INFO", "DEBUG"], case_sensitive=False)
+)
 def update_pythons(force: bool, level: str) -> None:
 
     logging.basicConfig(

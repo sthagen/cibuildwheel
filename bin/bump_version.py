@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 
+from __future__ import annotations
+
 import glob
 import os
 import subprocess
@@ -15,55 +17,66 @@ import cibuildwheel
 
 config = [
     # file path, version find/replace format
-    ('README.md', "cibuildwheel=={}"),
-    ('cibuildwheel/__init__.py', "__version__ = '{}'"),
-    ('docs/faq.md', "cibuildwheel=={}"),
-    ('docs/faq.md', "cibuildwheel@v{}"),
-    ('docs/setup.md', "cibuildwheel=={}"),
-    ('examples/*', "cibuildwheel=={}"),
-    ('examples/*', "cibuildwheel@v{}"),
-    ('setup.cfg', "version = {}"),
+    ("README.md", "cibuildwheel=={}"),
+    ("cibuildwheel/__init__.py", '__version__ = "{}"'),
+    ("docs/faq.md", "cibuildwheel=={}"),
+    ("docs/faq.md", "cibuildwheel@v{}"),
+    ("docs/setup.md", "cibuildwheel=={}"),
+    ("examples/*", "cibuildwheel=={}"),
+    ("examples/*", "cibuildwheel@v{}"),
+    ("setup.cfg", "version = {}"),
 ]
 
+RED = "\u001b[31m"
+GREEN = "\u001b[32m"
+OFF = "\u001b[0m"
 
-# This file requires Python 3.7
-# Setting -> None will cause MyPy to notice this.
+
 @click.command()
-def bump_version():
+def bump_version() -> None:
     current_version = cibuildwheel.__version__
 
     try:
-        commit_date_str = subprocess.run([
-            'git',
-            'show', '-s', '--pretty=format:%ci',
-            f'v{current_version}^{{commit}}'
-        ], check=True, capture_output=True, encoding='utf8').stdout
-        commit_date_parts = commit_date_str.split(' ')
+        commit_date_str = subprocess.run(
+            [
+                "git",
+                "show",
+                "--no-patch",
+                "--pretty=format:%ci",
+                f"v{current_version}^{{commit}}",
+            ],
+            check=True,
+            capture_output=True,
+            encoding="utf8",
+        ).stdout
+        cd_date, cd_time, cd_tz = commit_date_str.split(" ")
 
-        url = 'https://github.com/joerick/cibuildwheel/pulls?' + urllib.parse.urlencode({
-            'q': f'is:pr merged:>{commit_date_parts[0]}T{commit_date_parts[1]}{commit_date_parts[2]}',
-        })
-        print(f'PRs merged since last release:\n  {url}')
+        url_opts = urllib.parse.urlencode({"q": f"is:pr merged:>{cd_date}T{cd_time}{cd_tz}"})
+        url = f"https://github.com/pypa/cibuildwheel/pulls?{url_opts}"
+
+        print(f"PRs merged since last release:\n  {url}")
         print()
     except subprocess.CalledProcessError as e:
         print(e)
-        print('Failed to get previous version tag information.')
+        print("Failed to get previous version tag information.")
 
-    git_changes_result = subprocess.run(['git diff-index --quiet HEAD --'], shell=True)
+    git_changes_result = subprocess.run(["git diff-index --quiet HEAD --"], shell=True)
     repo_has_uncommitted_changes = git_changes_result.returncode != 0
 
     if repo_has_uncommitted_changes:
-        print('error: Uncommitted changes detected.')
+        print("error: Uncommitted changes detected.")
         sys.exit(1)
 
+    # fmt: off
     print(              'Current version:', current_version)  # noqa
     new_version = input('    New version: ').strip()
+    # fmt: on
 
     try:
         Version(new_version)
     except InvalidVersion:
         print("error: This version doesn't conform to PEP440")
-        print('       https://www.python.org/dev/peps/pep-0440/')
+        print("       https://www.python.org/dev/peps/pep-0440/")
         sys.exit(1)
 
     actions = []
@@ -72,7 +85,7 @@ def bump_version():
         paths = [Path(p) for p in glob.glob(path_pattern)]
 
         if not paths:
-            print(f'error: Pattern {path_pattern} didn’t match any files')
+            print(f"error: Pattern {path_pattern} didn't match any files")
             sys.exit(1)
 
         find_pattern = version_pattern.format(current_version)
@@ -80,15 +93,19 @@ def bump_version():
         found_at_least_one_file_needing_update = False
 
         for path in paths:
-            contents = path.read_text(encoding='utf8')
+            contents = path.read_text(encoding="utf8")
             if find_pattern in contents:
                 found_at_least_one_file_needing_update = True
                 actions.append(
-                    (path, find_pattern, replace_pattern)
+                    (
+                        path,
+                        find_pattern,
+                        replace_pattern,
+                    )
                 )
 
         if not found_at_least_one_file_needing_update:
-            print(f'error: Didn’t find any occurrences of “{find_pattern}” in “{path_pattern}”')
+            print(f'''error: Didn't find any occurrences of "{find_pattern}" in "{path_pattern}"''')
             sys.exit(1)
 
     print()
@@ -96,48 +113,53 @@ def bump_version():
     print()
 
     for action in actions:
-        print('{}  {red}{}{off} → {green}{}{off}'.format(
-            *action,
-            red="\u001b[31m", green="\u001b[32m", off="\u001b[0m"
-        ))
+        path, find, replace = action
+        print(f"{path}  {RED}{find}{OFF} → {GREEN}{replace}{OFF}")
 
-    print(f'Then commit, and tag as v{new_version}')
+    print(f"Then commit, and tag as v{new_version}")
 
-    answer = input('Proceed? [y/N] ').strip()
+    answer = input("Proceed? [y/N] ").strip()
 
-    if answer != 'y':
-        print('Aborted')
+    if answer != "y":
+        print("Aborted")
         sys.exit(1)
 
     for path, find, replace in actions:
-        contents = path.read_text(encoding='utf8')
+        contents = path.read_text(encoding="utf8")
         contents = contents.replace(find, replace)
-        path.write_text(contents, encoding='utf8')
+        path.write_text(contents, encoding="utf8")
 
-    print('Files updated. If you want to update the changelog as part of this')
-    print('commit, do that now.')
+    print("Files updated. If you want to update the changelog as part of this")
+    print("commit, do that now.")
     print()
 
-    while input('Type "done" to continue: ').strip().lower() != 'done':
+    while input('Type "done" to continue: ').strip().lower() != "done":
         pass
 
-    subprocess.run([
-        'git', 'commit',
-        '-a',
-        '-m', f'Bump version: v{new_version}'
-    ], check=True)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "--all",
+            f"--message=Bump version: v{new_version}",
+        ],
+        check=True,
+    )
 
-    subprocess.run([
-        'git', 'tag',
-        '-a',
-        '-m', f'v{new_version}',
-        f'v{new_version}'
-    ], check=True)
+    subprocess.run(
+        [
+            "git",
+            "tag",
+            "--annotate",
+            f"--message=v{new_version}",
+            f"v{new_version}",
+        ],
+        check=True,
+    )
 
-    print('Done.')
+    print("Done.")
 
 
-if __name__ == '__main__':
-    os.chdir(os.path.dirname(__file__))
-    os.chdir('..')
+if __name__ == "__main__":
+    os.chdir(Path(__file__).parent.parent.resolve())
     bump_version()

@@ -7,7 +7,8 @@ from . import test_projects, utils
 
 # TODO: specify these at runtime according to manylinux_image
 project_with_manylinux_symbols = test_projects.new_c_project(
-    spam_c_top_level_add=textwrap.dedent(r'''
+    spam_c_top_level_add=textwrap.dedent(
+        r"""
         #include <malloc.h>
         #include <stdlib.h>
         #include <stdint.h>
@@ -20,8 +21,10 @@ project_with_manylinux_symbols = test_projects.new_c_project(
         #if !__GLIBC_PREREQ(2, 5)  /* manylinux1 is glibc 2.5 */
         #error "Must run on a glibc >= 2.5 linux environment"
         #endif
-    '''),
-    spam_c_function_add=textwrap.dedent(r'''
+        """
+    ),
+    spam_c_function_add=textwrap.dedent(
+        r"""
         #if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 24)
             // nextupf is only available in manylinux_2_24+
             sts = (int)nextupf(0.0F);
@@ -32,44 +35,53 @@ project_with_manylinux_symbols = test_projects.new_c_project(
             // malloc_info is only available on manylinux2010+
             sts = malloc_info(0, stdout);
         #endif
-    '''),
+        """
+    ),
 )
 
 
-@pytest.mark.parametrize('manylinux_image', ['manylinux1', 'manylinux2010', 'manylinux2014', 'manylinux_2_24'])
+@pytest.mark.parametrize(
+    "manylinux_image", ["manylinux1", "manylinux2010", "manylinux2014", "manylinux_2_24"]
+)
 def test(manylinux_image, tmp_path):
-    if utils.platform != 'linux':
-        pytest.skip('the docker test is only relevant to the linux build')
-    elif platform.machine() not in ['x86_64', 'i686']:
-        if manylinux_image in ['manylinux1', 'manylinux2010']:
+    if utils.platform != "linux":
+        pytest.skip("the docker test is only relevant to the linux build")
+    elif platform.machine() not in ["x86_64", "i686"]:
+        if manylinux_image in ["manylinux1", "manylinux2010"]:
             pytest.skip("manylinux1 and 2010 doesn't exist for non-x86 architectures")
 
-    project_dir = tmp_path / 'project'
+    project_dir = tmp_path / "project"
     project_with_manylinux_symbols.generate(project_dir)
 
     # build the wheels
     # CFLAGS environment variable is necessary to fail on 'malloc_info' (on manylinux1) during compilation/linking,
     # rather than when dynamically loading the Python
     add_env = {
-        'CIBW_ENVIRONMENT': 'CFLAGS="$CFLAGS -O0 -Werror=implicit-function-declaration"',
-        'CIBW_MANYLINUX_X86_64_IMAGE': manylinux_image,
-        'CIBW_MANYLINUX_I686_IMAGE': manylinux_image,
-        'CIBW_MANYLINUX_PYPY_X86_64_IMAGE': manylinux_image,
-        'CIBW_MANYLINUX_AARCH64_IMAGE': manylinux_image,
-        'CIBW_MANYLINUX_PPC64LE_IMAGE': manylinux_image,
-        'CIBW_MANYLINUX_S390X_IMAGE': manylinux_image,
+        "CIBW_ENVIRONMENT": 'CFLAGS="$CFLAGS -O0 -Werror=implicit-function-declaration"',
+        "CIBW_MANYLINUX_X86_64_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_I686_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_PYPY_X86_64_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_AARCH64_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_PPC64LE_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_S390X_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_PYPY_AARCH64_IMAGE": manylinux_image,
+        "CIBW_MANYLINUX_PYPY_I686_IMAGE": manylinux_image,
     }
-    if manylinux_image == 'manylinux1':
-        # We don't have a manylinux1 image for PyPy
-        add_env['CIBW_SKIP'] = 'pp*'
-    elif manylinux_image in {'manylinux2014', 'manylinux_2_24'}:
-        # We don't have a manylinux2014 / 'manylinux_2_24' image for PyPy (yet?)
-        add_env['CIBW_SKIP'] = 'cp27* pp*'  # Python 2.7 not available on manylinux2014 / 'manylinux_2_24'
+    if manylinux_image in {"manylinux1"}:
+        # We don't have a manylinux1 image for PyPy & CPython 3.10 and above
+        add_env["CIBW_SKIP"] = "pp* cp31*"
+
     actual_wheels = utils.cibuildwheel_run(project_dir, add_env=add_env)
 
-    expected_wheels = [w for w in utils.expected_wheels('spam', '0.1.0', manylinux_versions=[manylinux_image])]
-    if manylinux_image in {'manylinux2014', 'manylinux_2_24'}:
-        expected_wheels = [w for w in expected_wheels if '-cp27' not in w]
-    if manylinux_image in {'manylinux1', 'manylinux2014', 'manylinux_2_24'}:
-        expected_wheels = [w for w in expected_wheels if '-pp' not in w]
+    platform_tag_map = {
+        "manylinux1": ["manylinux_2_5", "manylinux1"],
+        "manylinux2010": ["manylinux_2_12", "manylinux2010"],
+        "manylinux2014": ["manylinux_2_17", "manylinux2014"],
+    }
+    expected_wheels = utils.expected_wheels(
+        "spam", "0.1.0", manylinux_versions=platform_tag_map.get(manylinux_image, [manylinux_image])
+    )
+    if manylinux_image in {"manylinux1"}:
+        # remove PyPy & CPython 3.10 and above
+        expected_wheels = [w for w in expected_wheels if "-pp" not in w and "-cp31" not in w]
     assert set(actual_wheels) == set(expected_wheels)

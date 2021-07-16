@@ -45,12 +45,8 @@ To build Linux, Mac, and Windows wheels using GitHub Actions, create a `.github/
         steps:
           - uses: actions/checkout@v2
 
-          - name: Install Visual C++ for Python 2.7
-            if: runner.os == 'Windows'
-            run: choco install vcpython27 -f -y
-
           - name: Build wheels
-            run: pipx run cibuildwheel==1.10.0
+            run: pipx run cibuildwheel==2.0.0b2
 
           - uses: actions/upload-artifact@v2
             with:
@@ -85,11 +81,7 @@ To build Linux, Mac, and Windows wheels using GitHub Actions, create a `.github/
           - uses: actions/setup-python@v2
 
           - name: Install cibuildwheel
-            run: python -m pip install cibuildwheel==1.10.0
-
-          - name: Install Visual C++ for Python 2.7
-            if: runner.os == 'Windows'
-            run: choco install vcpython27 -f -y
+            run: python -m pip install cibuildwheel==2.0.0b2
 
           - name: Build wheels
             run: python -m cibuildwheel --output-dir wheelhouse
@@ -104,7 +96,7 @@ Commit this file, and push to GitHub - either to your default branch, or to a PR
 
 For more info on this file, check out the [docs](https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions).
 
-[`examples/github-deploy.yml`](https://github.com/joerick/cibuildwheel/blob/master/examples/github-deploy.yml) extends this minimal example with a demonstration of how to automatically upload the built wheels to PyPI.
+[`examples/github-deploy.yml`](https://github.com/pypa/cibuildwheel/blob/main/examples/github-deploy.yml) extends this minimal example with a demonstration of how to automatically upload the built wheels to PyPI.
 
 
 # Azure Pipelines [linux/mac/windows] {: #azure-pipelines}
@@ -117,16 +109,13 @@ To build Linux, Mac, and Windows wheels on Azure Pipelines, create a `azure-pipe
 {% include "../examples/azure-pipelines-minimal.yml" %}
 ```
 
-!!! note
-    To support Python 3.5 on Windows, make sure to specify the use of `{vmImage: 'vs2017-win2016'}` on Windows, to ensure the required toolchain is available.
-
 Commit this file, enable building of your repo on Azure Pipelines, and push.
 
 Wheels will be stored for you and available through the Pipelines interface. For more info on this file, check out the [docs](https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema).
 
-# Travis CI [linux/mac/windows] {: #travis-ci}
+# Travis CI [linux/windows] {: #travis-ci}
 
-To build Linux, Mac, and Windows wheels on Travis CI, create a `.travis.yml` file in your repo.
+To build Linux and Windows wheels on Travis CI, create a `.travis.yml` file in your repo.
 
 > .travis.yml
 
@@ -134,13 +123,11 @@ To build Linux, Mac, and Windows wheels on Travis CI, create a `.travis.yml` fil
 {% include "../examples/travis-ci-minimal.yml" %}
 ```
 
-Note that building Windows Python 2.7 wheels on Travis is unsupported unless using a newer compiler [via a workaround](cpp_standards.md).
-
 Commit this file, enable building of your repo on Travis CI, and push.
 
 Then setup a deployment method by following the [Travis CI deployment docs](https://docs.travis-ci.com/user/deployment/), or see [Delivering to PyPI](deliver-to-pypi.md). For more info on `.travis.yml`, check out the [docs](https://docs.travis-ci.com/).
 
-[`examples/travis-ci-deploy.yml`](https://github.com/joerick/cibuildwheel/blob/master/examples/travis-ci-deploy.yml) extends this minimal example with a demonstration of how to automatically upload the built wheels to PyPI.
+[`examples/travis-ci-deploy.yml`](https://github.com/pypa/cibuildwheel/blob/main/examples/travis-ci-deploy.yml) extends this minimal example with a demonstration of how to automatically upload the built wheels to PyPI.
 
 # AppVeyor [linux/mac/windows] {: #appveyor}
 

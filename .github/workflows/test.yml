@@ -3,7 +3,7 @@ name: Test
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     paths-ignore:
       - 'docs/**'
@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-python@v2
-    - uses: pre-commit/action@v2.0.0
+    - uses: pre-commit/action@v2.0.3
 
   test:
     name: Test cibuildwheel on ${{ matrix.os }}
@@ -37,19 +37,10 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install -e ".[dev]"
-
-    - name: Install Visual C++ for Python 2.7
-      if: runner.os == 'Windows'
-      run: |
-        choco install vcpython27 -f -y
-
-    - name: Get PR labels
-      id: pr-labels
-      uses: joerick/pr-labels-action@v1.0.6
+        python -m pip install ".[test]"
 
     - name: Sample build
-      if: contains(steps.pr-labels.outputs.labels, ' ci-sample-build ')
+      if: "contains(github.event.pull_request.labels.*.name, 'CI: Sample build')"
       run: |
         python bin/sample_build.py
 
@@ -79,7 +70,7 @@ jobs:
     - uses: actions/setup-python@v2
     - name: Install dependencies
       run: |
-        python -m pip install -r requirements-dev.txt
+        python -m pip install ".[test]"
 
     - name: Set up QEMU
       id: qemu

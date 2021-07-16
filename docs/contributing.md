@@ -8,6 +8,8 @@ If you have an idea for a modification or feature, it's probably best to raise a
 
 `cibuildwheel` is indie open source. We're not paid to work on this.
 
+Everyone contributing to the cibuildwheel project is expected to follow the [PSF Code of Conduct](https://github.com/pypa/.github/blob/main/CODE_OF_CONDUCT.md).
+
 Design Goals
 ------------
 
@@ -18,7 +20,7 @@ Design Goals
 
 Other notes:
 
-- The platforms are very similar, until they're not. I'd rather have straight-forward code than totally DRY code, so let's keep airy platfrom abstractions to a minimum.
+- The platforms are very similar, until they're not. I'd rather have straight-forward code than totally DRY code, so let's keep airy platform abstractions to a minimum.
 - I might want to break the options into a shared config file one day, so that config is more easily shared. That has motivated some of the design decisions.
 
 ### cibuildwheel's relationship with build errors
@@ -27,16 +29,37 @@ cibuildwheel doesn't really do anything itself - it's always deferring to other 
 
 We're not responsible for errors in those tools, for fixing errors/crashes there. But cibuildwheel's job is providing users with an 'integrated' user experience across those tools. We provide an abstraction. The user says 'build me some wheels', not 'open the docker container, build a wheel with pip, fix up the symbols with auditwheel' etc.  However, errors have a habit of breaking abstractions. And this is where users get confused, because the mechanism of cibuildwheel is laid bare, and they must understand a little bit how it works to debug.
 
-So, if we can, I'd like to improve the experience on errors as well. In [this](https://github.com/joerick/cibuildwheel/issues/139) case, it takes a bit of knowledge to understand that the Linux builds are happening in a different OS via Docker, that the linked symbols won't match, that auditwheel will fail because of this. A problem with how the tools fit together, instead of the tools themselves.
+So, if we can, I'd like to improve the experience on errors as well. In [this](https://github.com/pypa/cibuildwheel/issues/139) case, it takes a bit of knowledge to understand that the Linux builds are happening in a different OS via Docker, that the linked symbols won't match, that auditwheel will fail because of this. A problem with how the tools fit together, instead of the tools themselves.
 
 Maintainer notes
 ----------------
+
+### Nox support
+
+Most developer tasks have a nox interface. This allows you to very simply run tasks without worrying about setting up a development environment (as shown below). This is a slower than setting up a development environment and reusing it, but has the (important) benefit of being highly reproducible; an earlier run does not affect a current run, or anything else on your machine.
+
+Install [nox](https://nox.thea.codes); homebrew is recommend on macOS, otherwise, pipx is a great choice - in fact, you can use `pipx run nox` and avoid installing completely.
+
+You can see a list of sessions by typing `nox -l`; here are a few common ones:
+
+```console
+nox -s lint          # Run the linters (default)
+nox -s tests         # Run the tests   (default)
+nox -s docs -- serve # Build and serve the documentation
+nox -s build         # Make SDist and wheel
+```
+
+More advanced users can run the update scripts. `update_pins` should work directly, but `update_constraints` needs all versions of Python installed. If you don't want to do that locally, a fast way to run it to use docker to run nox:
+
+```console
+docker run --rm -itv $PWD:/src -w /src quay.io/pypa/manylinux_2_24_x86_64:latest pipx run nox -s update_constraints
+```
 
 ### Local testing
 
 You should run:
 
-```python
+```console
 python3 -m venv venv
 . venv/bin/activate
 pip install -e .[dev]
@@ -71,8 +94,6 @@ This has been moved to using docker, so you only need the following instructions
 The dependency update script in the next section requires multiple python versions installed. One way to do this is to use `pyenv`:
 
 ```bash
-pyenv install 2.7.18
-pyenv install 3.5.9
 pyenv install 3.6.11
 pyenv install 3.7.8
 # Optionally add 3.8 and make it the local version;
@@ -82,9 +103,6 @@ pyenv install 3.7.8
 Then, you need to make the required virtual environments:
 
 ```bash
-$(pyenv prefix 2.7.18)/bin/python -m pip install virtualenv
-$(pyenv prefix 2.7.18)/bin/python -m virtualenv env27
-$(pyenv prefix 3.5.9)/bin/python -m venv env35
 $(pyenv prefix 3.6.11)/bin/python -m venv env36
 $(pyenv prefix 3.7.8)/bin/python -m venv env37
 ```
@@ -118,4 +136,4 @@ twine upload dist/*
 git push && git push --tags
 ```
 
-Then head to https://github.com/joerick/cibuildwheel/releases and create a GitHub release from the new tag, pasting in the changelog entry.
+Then head to https://github.com/pypa/cibuildwheel/releases and create a GitHub release from the new tag, pasting in the changelog entry.

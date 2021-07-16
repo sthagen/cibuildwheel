@@ -9,7 +9,18 @@ else:
     from typing import Final, Literal, TypedDict
 
 
-__all__ = ("Final", "Literal", "TypedDict", "Set", "Union", "PopenBytes", "PathOrStr", "PlatformName", "PLATFORMS", "assert_never")
+__all__ = (
+    "Final",
+    "Literal",
+    "TypedDict",
+    "Set",
+    "Union",
+    "PopenBytes",
+    "PathOrStr",
+    "PlatformName",
+    "PLATFORMS",
+    "assert_never",
+)
 
 
 if TYPE_CHECKING:
@@ -25,4 +36,4 @@ PLATFORMS: Final[Set[PlatformName]] = {"linux", "macos", "windows"}
 
 
 def assert_never(value: NoReturn) -> NoReturn:
-    assert False, f'Unhandled value: {value} ({type(value).__name__})'  # noqa: B011
+    assert False, f"Unhandled value: {value} ({type(value).__name__})"  # noqa: B011
